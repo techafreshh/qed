@@ -1,0 +1,12 @@
+id: example_replication
+citation: "Smith, J. et al. (2015). Example finding on class size and test scores. Journal of Example Studies, 10(2), 123-145."
+claim: "Smaller class sizes raise average test scores by about 5 points (p < 0.05)."
+dataset_url: "https://example.org/datasets/class_size_scores.csv"
+sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+license: "CC0-1.0 (placeholder fixture; replace at freeze)"
+estimator: "OLS of test score on class-size indicator with school controls"
+reported_numbers:
+  headline_estimate: 5.0
+  p_value: 0.01
+expected_verdict: REPLICATED
+source: "Reproducibility Project: Psychology placeholder fixture (replace at freeze)"
