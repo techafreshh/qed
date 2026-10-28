@@ -32,3 +32,6 @@ runs_cache/
 .idea/
 .vscode/
 *.swp
+
+# Factory verifier drafts — never in the product repo
+.factory/
