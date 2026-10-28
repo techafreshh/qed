@@ -9,6 +9,11 @@ from codegen.base import (
     check_recursion_guard,
 )
 
+try:
+    from codegen.llama_backend import LlamaBackend
+except ImportError:
+    pass
+
 __all__ = [
     "RecursionGuardError",
     "check_recursion_guard",
@@ -16,4 +21,5 @@ __all__ = [
     "MuseBackend",
     "PiBackend",
     "LlamaDirectBackend",
+    "LlamaBackend",
 ]
