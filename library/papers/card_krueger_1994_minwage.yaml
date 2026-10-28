@@ -1,0 +1,17 @@
+# Frozen manifest: Card & Krueger (1994), minimum-wage difference-in-differences.
+# Size: 25,960 bytes (<100MB). Runtime: OLS on 820 rows runs in seconds (<5min).
+# Fetch-and-cache: download the URL below, verify sha256, then run offline.
+# Upstream source: Card's Berkeley data page (njmin.zip, public.dat + codebook);
+# this CSV is a column-identical mirror pinned by commit for byte stability.
+id: card_krueger_1994_minwage
+citation: "Card, D., & Krueger, A. B. (1994). Minimum wages and employment: A case study of the fast-food industry in New Jersey and Pennsylvania. American Economic Review, 84(4), 772-793."
+claim: "Raising New Jersey's minimum wage from $4.25 to $5.05 did not reduce fast-food employment: New Jersey stores gained about 2.76 full-time-equivalent employees relative to Pennsylvania controls (difference-in-differences)."
+dataset_url: "https://raw.githubusercontent.com/AnthonyPuggs/CardKrueger1994Replication/f13a42327d023af08d7f33bb2c2f70bdd285f662/njmin3.csv"
+sha256: "5dd549a40790d58cd1705474297ba9cf069e3dbc7fd561e4f6e14a1cde98a4d2"
+license: "MIT (LICENSE file in the same repository; upstream data from Card's Berkeley data page, njmin.zip)"
+estimator: "Difference-in-differences: OLS of FTE employment on the New-Jersey-by-post interaction (equivalently, NJ-minus-PA difference in mean employment change, column demp); re-implementable in statsmodels OLS."
+reported_numbers:
+  did_fte_estimate: 2.76
+  did_se: 1.36
+expected_verdict: REPLICATED
+source: "Original paper Table 3 (DiD +2.76, SE 1.36); reproduced from the pinned CSV (NJ-minus-PA mean change = +2.75, matching at reported rounding)."

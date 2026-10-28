@@ -1,0 +1,22 @@
+# Frozen manifest: Zhong & Liljenquist (2006) "Macbeth effect", via Many Labs 2 Slate 2.
+# The library's famous failure: original d=1.02 (N=27), ML2 replication d=0.00 (N=7,001).
+# Size: 43,496,730 bytes (<100MB). Runtime: CSV parse + OLS runs in <1min (<5min).
+# Fetch-and-cache: download the URL below with ?version=1 pinned, verify sha256, run offline.
+# Column map (ML2 Codebook for Primary Analyses): zhon1.1 = unethical-recall condition,
+# zhon2.1 = ethical-recall condition; zhon.dv.1_1..zhon.dv.1_10 = product desirability
+# (5 cleansing + 5 non-cleansing products); higher numbers = higher desirability.
+id: manylabs2_zhong_macbeth
+citation: "Zhong, C.-B., & Liljenquist, K. (2006). Washing away your sins: Threatened morality and physical cleansing. Science, 313(5792), 1451-1452."
+claim: "Recalling an unethical (vs ethical) deed increases desire for cleansing products (original: unethical M=4.95 vs ethical M=3.75, F(1,25)=6.99, p=0.01, d=1.02); Many Labs 2 found no difference (both M=3.95, d=0.00, p=0.91, N=7,001) — sign and significance both lost."
+dataset_url: "https://osf.io/download/jg9hc/?version=1"
+sha256: "842251429e2a27e64c2152ac48b34ff627e2e96723dd307f33830300b6c2f24e"
+license: "No machine-readable license on the OSF record (checked 2026-10-28); the Many Labs 2 paper is open access; fetch-and-cache only, no redistribution."
+estimator: "One-way ANOVA, equivalently OLS of mean cleansing-product desirability (zhon.dv items) on recall condition (zhon1.1/zhon2.1); re-implementable in statsmodels."
+reported_numbers:
+  cleansing_unethical_mean: 4.95
+  cleansing_ethical_mean: 3.75
+  f_stat: 6.99
+  p_value: 0.01
+  cohens_d: 1.02
+expected_verdict: FAILED
+source: "Original paper; failed replication in Klein et al. (2018), Many Labs 2 (t(6999)=-0.11, p=0.91, d=0.00, 95% CI [-0.05, 0.04], N=7,001)."

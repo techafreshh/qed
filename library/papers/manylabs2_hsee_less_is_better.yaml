@@ -1,0 +1,21 @@
+# Frozen manifest: Hsee (1998) less-is-better effect, via Many Labs 2 Slate 2.
+# Size: 43,496,730 bytes (<100MB). Runtime: CSV parse + t-test runs in <1min (<5min).
+# Fetch-and-cache: download the URL below with ?version=1 pinned, verify sha256, run offline.
+# Column map (ML2 Codebook for Primary Analyses): hsee1.1 = generosity, $90 scarf
+# condition (ML2 inflation-adjusted from the original $45 scarf); hsee2.1 = generosity,
+# $110 coat condition (from $55 coat); higher numbers = higher generosity.
+id: manylabs2_hsee_less_is_better
+citation: "Hsee, C. K. (1998). Less is better: When low-value options are valued more highly than high-value options. Journal of Behavioral Decision Making, 11(2), 107-121."
+claim: "A scarf that is expensive for its category is judged a more generous gift than a coat that is cheap for its category (original: scarf M=5.63 vs coat M=5.00, d=0.69); Many Labs 2 replicated the effect (scarf M=5.50 vs coat M=4.61, d=0.78, N=7,646)."
+dataset_url: "https://osf.io/download/jg9hc/?version=1"
+sha256: "842251429e2a27e64c2152ac48b34ff627e2e96723dd307f33830300b6c2f24e"
+license: "No machine-readable license on the OSF record (checked 2026-10-28); the Many Labs 2 paper is open access; fetch-and-cache only, no redistribution."
+estimator: "Two-sample t-test, equivalently OLS of generosity rating on a gift-condition dummy (columns hsee1.1/hsee2.1); re-implementable in statsmodels."
+reported_numbers:
+  generosity_scarf_mean: 5.63
+  generosity_coat_mean: 5.0
+  cohens_d: 0.69
+  t_stat: 3.13
+  p_value: 0.002
+expected_verdict: REPLICATED
+source: "Original paper (t(82)=3.13, p=0.002, d=0.69); clean replication in Klein et al. (2018), Many Labs 2 (d=0.78, 95% CI [0.74, 0.83], N=7,646)."

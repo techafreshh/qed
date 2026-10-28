@@ -1,0 +1,19 @@
+# Frozen manifest: Reinhart & Rogoff (2010), as corrected by Herndon, Ash & Pollin (2013).
+# Size: 139,342 bytes (<100MB). Runtime: OLS on 1,275 country-year rows runs in seconds (<5min).
+# Fetch-and-cache: download the URL below (version-pinned Zenodo record), verify sha256, run offline.
+# Columns: Country, Year, Debt, RGDP, dRGDP (real GDP growth), debtgdp (debt/GDP ratio), ...
+# The file is a CSV rendering of the Herndon-Ash-Pollin corrected RR panel; the authoritative
+# replication package (Stata/R sources) is Herndon, Ash & Pollin, Zenodo record 4017423.
+id: reinhart_rogoff_2010_debt
+citation: "Reinhart, C. M., & Rogoff, K. S. (2010). Growth in a time of debt. American Economic Review, 100(2), 573-578; as corrected by Herndon, T., Ash, M., & Pollin, R. (2013). Does high public debt consistently stifle economic growth? A critique of Reinhart and Rogoff. Cambridge Journal of Economics, 38(2), 257-279."
+claim: "Mean real GDP growth collapses to about -0.1% when the debt/GDP ratio exceeds 90%; the Herndon-Ash-Pollin correction finds about +2.2% for the same bucket — the cross-bucket pattern keeps its sign but the headline magnitude does not survive."
+dataset_url: "https://zenodo.org/records/4082020/files/countries_dataset.csv?download=1"
+sha256: "0f7cc7e8a0826fc244997a172c93a5f034d9a59c2e174b9505a2f9e30e9c55a1"
+license: "Recorded as AGPL-v3 on the Zenodo record (checked 2026-10-28); authoritative replication package is Herndon-Ash-Pollin Zenodo record 4017423; fetch-and-cache only, no redistribution."
+estimator: "OLS / bucketed means of real GDP growth (dRGDP) by debt-to-GDP ratio (debtgdp), replicating the above-90% bucket average; re-implementable in statsmodels."
+reported_numbers:
+  growth_high_debt_mean_orig: -0.1
+  growth_high_debt_mean_corrected: 2.2
+  debt_threshold_pct: 90.0
+expected_verdict: PARTIAL
+source: "Reinhart & Rogoff (2010) headline -0.1% for debt/GDP above 90%; Herndon, Ash & Pollin (2013) correction +2.2% — same directional pattern across buckets, headline magnitude lost (rubric PARTIAL)."
