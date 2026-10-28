@@ -14,7 +14,7 @@ It is a mechanic re-running the engine, not a critic reviewing the car: it check
 
 **MVP goal:** claim in → executed notebook out → correct verdict on a frozen library of pre-vetted papers (including at least one famous failure), in <10 minutes wall-clock, deployed at a stable URL, with a fully offline fallback for the live demo.
 
-**Sponsor alignment (the Stage One story):** Llama (Meta Model API) does the reasoning and planning; analysis code is authored by Meta's coding agent (Muse Code) where callable headless, with honest fallbacks; execution runs on Modal sandboxes.
+**Sponsor alignment (the Stage One story):** Llama (Meta Model API) does the reasoning and planning; analysis code is authored by a coding agent running Meta's Muse Spark model, with honest fallbacks; execution runs on Modal sandboxes. QED itself is built by a Muse-powered coding agent in a dark factory.
 
 ## 2. Mission
 
@@ -39,7 +39,7 @@ Core principles:
 
 **Core functionality**
 - [ ] Claim extraction: Llama turns paper abstract/PDF text + claim statement into a falsifiable spec (dataset, estimator, headline number(s), significance claim)
-- [ ] Independent re-analysis: analysis code authored via a **pluggable codegen port** — backends: `muse` (Meta Muse Code CLI, subprocess; default iff D1 spike proves headless invocation), `pi` (pi CLI subprocess), `llama_direct` (direct Llama codegen)
+- [ ] Independent re-analysis: analysis code authored via a **pluggable codegen port** — backends: `muse` (coding agent running Meta's **muse-spark** model via pi subprocess — default; the Muse Code CLI binary is an optional upgrade behind the same interface), `pi` (pi CLI subprocess), `llama_direct` (direct Llama codegen)
 - [ ] Spec grid: small grid over analytical choices (controls in/out, SE choices, sample windows) to test fragility; the fragile choice is named in every non-clean verdict
 - [ ] Sandboxed execution on Modal: 2 frozen images (see §8), no network egress except whitelisted pip index, 5-minute hard time-box per run, run log (code hash, image hash, duration, verdict)
 - [ ] Debug loop: failures (import errors, shape mismatches, non-convergence) go back to the code author with the traceback, max **3 iterations**, then honest failure artifact
@@ -131,7 +131,7 @@ qed/
 **Key patterns:**
 - **`QED_OFFLINE=1` dual-purpose mode** — deterministic cached runs. It is simultaneously (a) the hackathon's offline-demo requirement and (b) the acceptance-test mode: factory verify scenarios and CI never need Meta/Modal keys or credits.
 - **One event stream, two consumers** — the orchestrator emits typed stage events; the REST/SSE contract (§11) serves artifacts and acceptance scenarios, and the same run is mirrored as AG-UI protocol events for the CopilotKit UI. Demo-critical views (trace, verdict card, notebook) render from our own state, so CopilotKit is the interactive layer, never a single point of failure.
-- **Codegen port** — one interface, three backends; the D1 spike (`muse --help` / headless exec probe) decides the default; the port protects the schedule from Muse auth/CLI surprises.
+- **Codegen port** — one interface, three backends. `muse` = pi running Meta's `muse-spark-1.3-contributor` — already proven headless in the build factory's provider roster (this resolves the D1 spike; the branded Muse Code CLI remains an optional upgrade behind the same interface). Recursion guard: refuse when `OPENCODE_INVOKED_BY` or `QED_AGENT_DEPTH` is set.
 - **Rubric as pure function** — structured run results in, verdict out; no model calls inside.
 
 ## 7. Tools / Features
@@ -241,18 +241,17 @@ POST /api/runs
 ## 14. Risks & Mitigations
 
 1. **Library won't freeze (the #1 risk)** → kill rule with floor=4 fires end of D2; decide fast; the library IS the schedule risk.
-2. **Muse Code not headless-callable** → codegen port falls back to `pi`, then `llama_direct`; the demo story adjusts honestly ("analysis code authored by an AI coding agent, executed on Modal").
+2. **Muse integration surprises** → the `muse` backend (pi × muse-spark) is already proven in the build factory; codegen port still falls back to `pi`, then `llama_direct` on any runtime surprise.
 3. **Meta/Modal credentials not ready** → operator checklist D1; offline mode unblocks all build + verify regardless; no lap ever depends on live keys.
 4. **Live run stalls on stage** → rehearsed cut to cached notebooks (offline mode), no improvisation.
 5. **Cost overrun** → free credits only: frozen images, small max_tokens, cached demo, daily credit checks.
 
 ## 15. Operator Checklist (NOT factory issues — laps cannot do these)
 
-- [ ] Create Modal account + token (D1)
+- [ ] Modal account + token (D1)
 - [ ] Put Meta Model API key into the deploy environment (D1)
-- [ ] Run `foreman bake qed` VPS-side (instabox snapshot prerequisite, before first lap)
-- [ ] Muse Code auth spike: install CLI, verify non-interactive invocation, record the result (D1)
 - [ ] Sign off the paper candidate list; make the D2 freeze call (kill rule: floor = 4)
+- [ ] (Optional) Muse Code CLI upgrade behind the codegen port — the `muse` backend already works via pi × muse-spark
 - [ ] Deploy to Modal; verify stable URL
 - [ ] Video decision + recording (deferred — deliberately not sliced)
 - [ ] Hackathon submission before Nov 4, 9:00 PM ET; keep URL live through Nov 8
