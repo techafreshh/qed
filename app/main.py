@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from app.config import settings  # noqa: F401  (loads env with safe defaults)
+
 app = FastAPI(title="QED")
 
 
