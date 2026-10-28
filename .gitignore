@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Node / UI
+node_modules/
+ui/dist/
+.vite/
+
+# SQLite / run artifacts
+*.db
+*.sqlite3
+runs_cache/
+
+# Modal
+.modal/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
