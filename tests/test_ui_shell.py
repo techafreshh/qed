@@ -41,3 +41,14 @@ def test_unknown_non_api_path_falls_back_to_spa():
 def test_unknown_api_path_stays_404_json():
     response = client.get("/api/runs/does-not-exist")
     assert response.status_code == 404
+
+
+def test_claim_input_posts_form_to_runs_with_paper_text():
+    view = REPO_ROOT / "ui" / "src" / "views" / "ClaimInput.tsx"
+    assert view.is_file()
+    text = view.read_text(encoding="utf-8")
+    assert "<form" in text
+    assert "/api/runs" in text
+    assert "paper_text" in text
+    assert "<textarea" in text
+    assert "<select" in text

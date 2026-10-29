@@ -22,6 +22,7 @@ _SCHEMA_STATEMENTS = (
         run_id TEXT PRIMARY KEY,
         paper_id TEXT,
         claim TEXT,
+        paper_text TEXT,
         status TEXT NOT NULL DEFAULT 'queued',
         verdict TEXT,
         fragile_choice TEXT,
@@ -83,13 +84,14 @@ def _connect(db_path: str | Path | None = None) -> sqlite3.Connection:
 
 _RUN_EXTRA_COLUMNS = (
     ("claim", "TEXT"),
+    ("paper_text", "TEXT"),
     ("fragile_choice", "TEXT"),
     ("trace_json", "TEXT"),
     ("notebook_json", "TEXT"),
 )
 
 _RUN_SELECT_COLUMNS = (
-    "run_id, paper_id, claim, status, verdict, "
+    "run_id, paper_id, claim, paper_text, status, verdict, "
     "fragile_choice, trace_json, notebook_json, created_at"
 )
 
@@ -145,6 +147,10 @@ def _run_dict(row: sqlite3.Row) -> dict:
     item["notebook"] = notebook if isinstance(notebook, dict) else None
     if item.get("claim") is None:
         item["claim"] = ""
+    if "paper_text" not in item or item.get("paper_text") is None:
+        item["paper_text"] = None
+    elif isinstance(item.get("paper_text"), str) and not item["paper_text"].strip():
+        item["paper_text"] = None
     return item
 
 
@@ -180,6 +186,7 @@ def create_run(paper_id: str | None = "", db_path=None, **kwargs) -> dict:
     status = kwargs.pop("status", "queued")
     verdict = kwargs.pop("verdict", None)
     claim = kwargs.pop("claim", "")
+    paper_text = kwargs.pop("paper_text", None)
     fragile_choice = kwargs.pop("fragile_choice", None)
     trace = kwargs.pop("trace", None)
     notebook = kwargs.pop("notebook", None)
@@ -191,12 +198,21 @@ def create_run(paper_id: str | None = "", db_path=None, **kwargs) -> dict:
         verdict = payload.get("verdict", verdict)
         claim = payload.get("claim", claim)
         fragile_choice = payload.get("fragile_choice", fragile_choice)
+        paper_text = payload.get("paper_text", paper_text)
         trace = payload.get("trace", trace)
         notebook = payload.get("notebook", notebook)
     if claim is None:
         claim = ""
     elif not isinstance(claim, str):
         claim = str(claim)
+    if paper_text is None:
+        pass
+    elif not isinstance(paper_text, str):
+        paper_text = str(paper_text)
+        if not paper_text.strip():
+            paper_text = None
+    elif not paper_text.strip():
+        paper_text = None
     run_id = kwargs.pop("run_id", None) or f"run_{uuid.uuid4().hex[:8]}"
     created_at = _now_iso()
     trace_json = _encode_detail(trace)
@@ -204,13 +220,14 @@ def create_run(paper_id: str | None = "", db_path=None, **kwargs) -> dict:
     with _connect(db_path) as conn:
         conn.execute(
             "INSERT INTO runs"
-            " (run_id, paper_id, claim, status, verdict,"
+            " (run_id, paper_id, claim, paper_text, status, verdict,"
             " fragile_choice, trace_json, notebook_json, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 run_id,
                 paper_id,
                 claim,
+                paper_text,
                 status,
                 verdict,
                 fragile_choice,
@@ -230,6 +247,7 @@ def create_run(paper_id: str | None = "", db_path=None, **kwargs) -> dict:
 def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -> dict | None:
     """Update a run row's progress and return the refreshed dict."""
     claim = kwargs.pop("claim", None)
+    paper_text = kwargs.pop("paper_text", None)
     fragile_choice = kwargs.pop("fragile_choice", None)
     trace = kwargs.pop("trace", None)
     notebook = kwargs.pop("notebook", None)
@@ -246,6 +264,8 @@ def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -
             claim = payload.get("claim")
         if fragile_choice is None:
             fragile_choice = payload.get("fragile_choice")
+        if paper_text is None:
+            paper_text = payload.get("paper_text")
         if trace is None:
             trace = payload.get("trace", payload.get("trace_json"))
         if notebook is None:
@@ -261,6 +281,10 @@ def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -
         fields["verdict"] = verdict
     if claim is not None:
         fields["claim"] = claim if isinstance(claim, str) else str(claim)
+    if paper_text is not None:
+        if not isinstance(paper_text, str):
+            paper_text = str(paper_text)
+        fields["paper_text"] = paper_text if paper_text.strip() else None
     if fragile_choice is not None:
         fields["fragile_choice"] = fragile_choice
     if trace is not None:

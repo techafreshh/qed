@@ -18,10 +18,11 @@ _FIXTURE_MANIFEST_ID = "example_replication"
 
 
 class RunIn(BaseModel):
-    """POST /api/runs body; both fields required non-blank (else 422)."""
+    """POST /api/runs body; paper/claim required non-blank, paper_text optional."""
 
     paper_id: str = Field(min_length=1)
     claim: str = Field(min_length=1)
+    paper_text: str | None = Field(default=None)
 
     @field_validator("paper_id", "claim")
     @classmethod
@@ -29,6 +30,16 @@ class RunIn(BaseModel):
         if not value.strip():
             raise ValueError("must not be blank")
         return value
+
+    @field_validator("paper_text")
+    @classmethod
+    def _clean_paper_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
 
 
 def known_paper_ids() -> set[str]:
@@ -63,6 +74,7 @@ def _run_detail(row: dict) -> dict:
     return {
         "run_id": row.get("run_id"),
         "paper_id": row.get("paper_id"),
+        "paper_text": row.get("paper_text"),
         "status": row.get("status", "queued"),
         "verdict": row.get("verdict"),
         "fragile_choice": row.get("fragile_choice"),
@@ -119,7 +131,7 @@ def create_run_slash(body: RunIn, background_tasks: BackgroundTasks) -> dict:
 def _create_run(body: RunIn, background_tasks: BackgroundTasks | None = None) -> dict:
     if body.paper_id not in known_paper_ids():
         raise HTTPException(status_code=404, detail="unknown paper")
-    row = create_run(paper_id=body.paper_id, claim=body.claim)
+    row = create_run(paper_id=body.paper_id, claim=body.claim, paper_text=body.paper_text)
     if background_tasks is not None:
         try:
             schedule_run(row["run_id"], background_tasks)
