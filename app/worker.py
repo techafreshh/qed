@@ -8,8 +8,11 @@ subprocesses or network calls itself.
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import BackgroundTasks
 
+from app.config import parse_offline
 from db.models import get_run, update_run
 
 
@@ -48,7 +51,19 @@ def _offline_result(paper_id: str, claim: str) -> dict:
 
 
 def _call_orchestrator(paper_id: str, claim: str) -> dict:
-    """Call ``agent.orchestrate.run_claim`` live; stub fallback if missing."""
+    """Call the cached replay first when offline, else live ``run_claim``."""
+    if parse_offline(os.environ.get("QED_OFFLINE")):
+        try:
+            from runner.offline import NotFound, replay  # noqa: PLC0415
+        except Exception:
+            pass
+        else:
+            try:
+                return replay(paper_id)
+            except NotFound:
+                pass
+            except Exception:
+                pass
     func = None
     try:
         import agent.orchestrate as _mod  # noqa: PLC0415 (live lookup honors patches)
