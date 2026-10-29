@@ -22,6 +22,10 @@ Built for the Meta Global AI Developer Hackathon: Llama (Meta Model API) does th
 
 Coming with the walking skeleton. Required keys will live in `.env` (see `.env.example`): `META_API_KEY`, `MODAL_TOKEN`, plus `QED_OFFLINE` and `QED_CODEGEN_BACKEND` mode flags.
 
+### Side-chat fallback
+
+The run side-chat panel (`ui/src/copilot.tsx`) answers from the run trace over REST (`fetchRun`) plus the live AG-UI stream (`GET /api/runs/{id}/events`). CopilotKit's `useCopilotChat` is resolved through a guarded dynamic import only — when CopilotKit is disabled or the network is blocked, the verdict card and trace views still render from REST with zero config required.
+
 ## The paper library
 
 QED validates against a frozen library of pre-vetted papers with recorded expected verdicts, sourced from large-scale replication efforts (Reproducibility Project: Psychology, Many Labs) and published failed replications. The library is the validation set **and** the demo set — every manifest records its expected verdict and the source of that expectation (PRD §10).
