@@ -98,8 +98,10 @@ def test_worker_marks_failed_honestly(monkeypatch):
         raise RuntimeError("synthetic orchestrator failure")
 
     monkeypatch.setattr(orchestrate, "run_claim", _boom)
+    # example_replication has no cached fixture, so the offline replay
+    # seam falls through and the orchestrator failure is honored.
     response = client.post(
-        "/api/runs", json={"paper_id": "demo_replicated", "claim": "will fail"}
+        "/api/runs", json={"paper_id": "example_replication", "claim": "will fail"}
     )
     assert response.status_code == 202
     run_id = response.json()["run_id"]
