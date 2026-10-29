@@ -128,6 +128,50 @@ def create_run(paper_id: str | None = "", db_path=None, **kwargs) -> dict:
     return dict(row)
 
 
+def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -> dict | None:
+    """Update a run row's status/verdict and return the refreshed dict."""
+    if isinstance(run_id, dict):
+        payload = dict(run_id)
+        run_id = payload.get("run_id", payload.get("id"))
+        if status is None:
+            status = payload.get("status")
+        if verdict is None:
+            verdict = payload.get("verdict")
+    if db_path is None and "db_path" in kwargs:
+        db_path = kwargs.pop("db_path")
+    if not isinstance(run_id, str):
+        return None
+    fields: dict[str, object] = {}
+    if status is not None:
+        fields["status"] = status
+    if verdict is not None:
+        fields["verdict"] = verdict
+    for key, value in kwargs.items():
+        if key in ("status", "verdict") and key not in fields:
+            fields[key] = value
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT run_id, paper_id, status, verdict, created_at"
+            " FROM runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        if fields:
+            assignments = ", ".join(f"{column} = ?" for column in fields)
+            conn.execute(
+                f"UPDATE runs SET {assignments} WHERE run_id = ?",
+                (*fields.values(), run_id),
+            )
+            conn.commit()
+        refreshed = conn.execute(
+            "SELECT run_id, paper_id, status, verdict, created_at"
+            " FROM runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+    return dict(refreshed)
+
+
 def get_run(run_id: str, db_path=None, **kwargs) -> dict | None:
     """Fetch a run row by id; return None when unknown."""
     if db_path is None and "db_path" in kwargs:
@@ -255,4 +299,5 @@ __all__ = [
     "insert_paper",
     "list_artifacts",
     "list_papers",
+    "update_run",
 ]
