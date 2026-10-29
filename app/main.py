@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from app.api.events import router as events_router
 from app.api.papers import router as papers_router
 from app.api.runs import router as runs_router
 from app.config import settings  # noqa: F401  (loads env with safe defaults)
 
 app = FastAPI(title="QED")
 app.include_router(papers_router)
+app.include_router(events_router)
 app.include_router(runs_router)
 
 

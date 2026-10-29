@@ -1,6 +1,7 @@
 """SQLite persistence for papers, runs, and artifacts (stdlib sqlite3 only)."""
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import uuid
@@ -20,8 +21,12 @@ _SCHEMA_STATEMENTS = (
     """CREATE TABLE IF NOT EXISTS runs (
         run_id TEXT PRIMARY KEY,
         paper_id TEXT,
+        claim TEXT,
         status TEXT NOT NULL DEFAULT 'queued',
         verdict TEXT,
+        fragile_choice TEXT,
+        trace_json TEXT,
+        notebook_json TEXT,
         created_at TEXT
     )""",
     """CREATE TABLE IF NOT EXISTS artifacts (
@@ -76,6 +81,73 @@ def _connect(db_path: str | Path | None = None) -> sqlite3.Connection:
     return conn
 
 
+_RUN_EXTRA_COLUMNS = (
+    ("claim", "TEXT"),
+    ("fragile_choice", "TEXT"),
+    ("trace_json", "TEXT"),
+    ("notebook_json", "TEXT"),
+)
+
+_RUN_SELECT_COLUMNS = (
+    "run_id, paper_id, claim, status, verdict, "
+    "fragile_choice, trace_json, notebook_json, created_at"
+)
+
+
+def _ensure_runs_columns(conn: sqlite3.Connection) -> None:
+    """Add worker columns to pre-existing runs tables; never raises."""
+    try:
+        existing = {
+            row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()
+        }
+    except sqlite3.Error:
+        return
+    for name, ddl in _RUN_EXTRA_COLUMNS:
+        if name not in existing:
+            try:
+                conn.execute(f"ALTER TABLE runs ADD COLUMN {name} {ddl}")
+            except sqlite3.Error:
+                pass
+
+
+def _encode_detail(value) -> str | None:
+    """Serialize trace/notebook payloads to JSON text; None stays NULL."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _decode_detail(text, fallback):
+    """Parse a JSON text column; return fallback on NULL/blank/invalid."""
+    if text is None:
+        return fallback
+    if isinstance(text, (list, dict)):
+        return text
+    if not isinstance(text, str) or not text.strip():
+        return fallback
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        return fallback
+
+
+def _run_dict(row: sqlite3.Row) -> dict:
+    """Convert a runs row to the public dict shape with decoded payloads."""
+    item = dict(row)
+    trace = _decode_detail(item.pop("trace_json", None), None)
+    notebook = _decode_detail(item.pop("notebook_json", None), None)
+    item["trace"] = trace if isinstance(trace, list) else None
+    item["notebook"] = notebook if isinstance(notebook, dict) else None
+    if item.get("claim") is None:
+        item["claim"] = ""
+    return item
+
+
 def init_db(conn: sqlite3.Connection | str | Path | None = None, db_path=None) -> None:
     """Create tables idempotently; accepts a connection, a path, or nothing."""
     if isinstance(conn, (str, Path)):
@@ -85,10 +157,12 @@ def init_db(conn: sqlite3.Connection | str | Path | None = None, db_path=None) -
         with _open(db_path) as fresh:
             for statement in _SCHEMA_STATEMENTS:
                 fresh.execute(statement)
+            _ensure_runs_columns(fresh)
             fresh.commit()
         return
     for statement in _SCHEMA_STATEMENTS:
         conn.execute(statement)
+    _ensure_runs_columns(conn)
     try:
         conn.commit()
     except sqlite3.Error:
@@ -105,31 +179,62 @@ def create_run(paper_id: str | None = "", db_path=None, **kwargs) -> dict:
         db_path = kwargs.pop("db_path")
     status = kwargs.pop("status", "queued")
     verdict = kwargs.pop("verdict", None)
+    claim = kwargs.pop("claim", "")
+    fragile_choice = kwargs.pop("fragile_choice", None)
+    trace = kwargs.pop("trace", None)
+    notebook = kwargs.pop("notebook", None)
     # Tolerate a mapping passed positionally instead of a paper id.
     if isinstance(paper_id, dict):
         payload = dict(paper_id)
         paper_id = payload.get("paper_id", payload.get("id", ""))
         status = payload.get("status", status)
         verdict = payload.get("verdict", verdict)
+        claim = payload.get("claim", claim)
+        fragile_choice = payload.get("fragile_choice", fragile_choice)
+        trace = payload.get("trace", trace)
+        notebook = payload.get("notebook", notebook)
+    if claim is None:
+        claim = ""
+    elif not isinstance(claim, str):
+        claim = str(claim)
     run_id = kwargs.pop("run_id", None) or f"run_{uuid.uuid4().hex[:8]}"
     created_at = _now_iso()
+    trace_json = _encode_detail(trace)
+    notebook_json = _encode_detail(notebook)
     with _connect(db_path) as conn:
         conn.execute(
-            "INSERT INTO runs (run_id, paper_id, status, verdict, created_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (run_id, paper_id, status, verdict, created_at),
+            "INSERT INTO runs"
+            " (run_id, paper_id, claim, status, verdict,"
+            " fragile_choice, trace_json, notebook_json, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                run_id,
+                paper_id,
+                claim,
+                status,
+                verdict,
+                fragile_choice,
+                trace_json,
+                notebook_json,
+                created_at,
+            ),
         )
         conn.commit()
         row = conn.execute(
-            "SELECT run_id, paper_id, status, verdict, created_at"
-            " FROM runs WHERE run_id = ?",
+            f"SELECT {_RUN_SELECT_COLUMNS} FROM runs WHERE run_id = ?",
             (run_id,),
         ).fetchone()
-    return dict(row)
+    return _run_dict(row)
 
 
 def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -> dict | None:
-    """Update a run row's status/verdict and return the refreshed dict."""
+    """Update a run row's progress and return the refreshed dict."""
+    claim = kwargs.pop("claim", None)
+    fragile_choice = kwargs.pop("fragile_choice", None)
+    trace = kwargs.pop("trace", None)
+    notebook = kwargs.pop("notebook", None)
+    trace_json = kwargs.pop("trace_json", None)
+    notebook_json = kwargs.pop("notebook_json", None)
     if isinstance(run_id, dict):
         payload = dict(run_id)
         run_id = payload.get("run_id", payload.get("id"))
@@ -137,6 +242,14 @@ def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -
             status = payload.get("status")
         if verdict is None:
             verdict = payload.get("verdict")
+        if claim is None:
+            claim = payload.get("claim")
+        if fragile_choice is None:
+            fragile_choice = payload.get("fragile_choice")
+        if trace is None:
+            trace = payload.get("trace", payload.get("trace_json"))
+        if notebook is None:
+            notebook = payload.get("notebook", payload.get("notebook_json"))
     if db_path is None and "db_path" in kwargs:
         db_path = kwargs.pop("db_path")
     if not isinstance(run_id, str):
@@ -146,13 +259,30 @@ def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -
         fields["status"] = status
     if verdict is not None:
         fields["verdict"] = verdict
+    if claim is not None:
+        fields["claim"] = claim if isinstance(claim, str) else str(claim)
+    if fragile_choice is not None:
+        fields["fragile_choice"] = fragile_choice
+    if trace is not None:
+        fields["trace_json"] = _encode_detail(trace)
+    elif trace_json is not None:
+        fields["trace_json"] = (
+            trace_json if isinstance(trace_json, str) else _encode_detail(trace_json)
+        )
+    if notebook is not None:
+        fields["notebook_json"] = _encode_detail(notebook)
+    elif notebook_json is not None:
+        fields["notebook_json"] = (
+            notebook_json
+            if isinstance(notebook_json, str)
+            else _encode_detail(notebook_json)
+        )
     for key, value in kwargs.items():
         if key in ("status", "verdict") and key not in fields:
             fields[key] = value
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT run_id, paper_id, status, verdict, created_at"
-            " FROM runs WHERE run_id = ?",
+            f"SELECT {_RUN_SELECT_COLUMNS} FROM runs WHERE run_id = ?",
             (run_id,),
         ).fetchone()
         if row is None:
@@ -165,11 +295,10 @@ def update_run(run_id=None, status=None, verdict=None, db_path=None, **kwargs) -
             )
             conn.commit()
         refreshed = conn.execute(
-            "SELECT run_id, paper_id, status, verdict, created_at"
-            " FROM runs WHERE run_id = ?",
+            f"SELECT {_RUN_SELECT_COLUMNS} FROM runs WHERE run_id = ?",
             (run_id,),
         ).fetchone()
-    return dict(refreshed)
+    return _run_dict(refreshed)
 
 
 def get_run(run_id: str, db_path=None, **kwargs) -> dict | None:
@@ -180,11 +309,10 @@ def get_run(run_id: str, db_path=None, **kwargs) -> dict | None:
         return None
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT run_id, paper_id, status, verdict, created_at"
-            " FROM runs WHERE run_id = ?",
+            f"SELECT {_RUN_SELECT_COLUMNS} FROM runs WHERE run_id = ?",
             (run_id,),
         ).fetchone()
-    return dict(row) if row is not None else None
+    return _run_dict(row) if row is not None else None
 
 
 def insert_paper(

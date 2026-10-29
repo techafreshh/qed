@@ -1,9 +1,10 @@
 """POST /api/runs and GET /api/runs/{id}[/notebook] (offline, never 500)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from app.worker import schedule_run
 from db.models import create_run, get_run
 from library.schema import load_library
 
@@ -45,6 +46,9 @@ def _notebook_url(run_id: str) -> str:
 
 
 def _trace_for(row: dict) -> list[dict]:
+    trace = row.get("trace")
+    if isinstance(trace, list) and trace:
+        return trace
     return [
         {
             "stage": row.get("status", "queued"),
@@ -61,13 +65,21 @@ def _run_detail(row: dict) -> dict:
         "paper_id": row.get("paper_id"),
         "status": row.get("status", "queued"),
         "verdict": row.get("verdict"),
-        "fragile_choice": None,
+        "fragile_choice": row.get("fragile_choice"),
         "trace": _trace_for(row),
         "notebook_url": _notebook_url(row.get("run_id", "")),
     }
 
 
 def _notebook_for(row: dict) -> dict:
+    persisted = row.get("notebook")
+    if isinstance(persisted, dict) and isinstance(persisted.get("cells"), list):
+        out = dict(persisted)
+        out.setdefault("run_id", row.get("run_id"))
+        out.setdefault("paper_id", row.get("paper_id"))
+        out.setdefault("status", row.get("status", "queued"))
+        out.setdefault("verdict", row.get("verdict"))
+        return out
     return {
         "run_id": row.get("run_id"),
         "paper_id": row.get("paper_id"),
@@ -95,19 +107,24 @@ def _require_run(run_id: str) -> dict:
 
 
 @router.post("", status_code=202, include_in_schema=False)
-def create_run_no_slash(body: RunIn) -> dict:
-    return _create_run(body)
+def create_run_no_slash(body: RunIn, background_tasks: BackgroundTasks) -> dict:
+    return _create_run(body, background_tasks)
 
 
 @router.post("/", status_code=202)
-def create_run_slash(body: RunIn) -> dict:
-    return _create_run(body)
+def create_run_slash(body: RunIn, background_tasks: BackgroundTasks) -> dict:
+    return _create_run(body, background_tasks)
 
 
-def _create_run(body: RunIn) -> dict:
+def _create_run(body: RunIn, background_tasks: BackgroundTasks | None = None) -> dict:
     if body.paper_id not in known_paper_ids():
         raise HTTPException(status_code=404, detail="unknown paper")
-    row = create_run(paper_id=body.paper_id)
+    row = create_run(paper_id=body.paper_id, claim=body.claim)
+    if background_tasks is not None:
+        try:
+            schedule_run(row["run_id"], background_tasks)
+        except Exception:
+            pass
     return {"run_id": row["run_id"], "status": row.get("status", "queued")}
 
 
