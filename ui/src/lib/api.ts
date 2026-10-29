@@ -63,13 +63,19 @@ export async function listPapers(): Promise<Paper[]> {
 export async function createRun(
   paperId: string,
   claim: string,
+  paperText?: string,
 ): Promise<{ run_id: string; status: string }> {
+  const trimmed = (paperText ?? "").trim();
+  const body: Record<string, string> =
+    trimmed.length > 0
+      ? { paper_id: paperId, claim, paper_text: trimmed }
+      : { paper_id: paperId, claim };
   let res: Response;
   try {
     res = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paper_id: paperId, claim }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     throw new Error(`cannot reach the QED server: ${String(err)}`);

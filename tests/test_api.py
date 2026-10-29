@@ -66,3 +66,61 @@ def test_unknown_run_404_and_early_notebook_409():
     # The offline worker may already have completed the run, in which case
     # the notebook is 200; otherwise a pending run is 409. Either is correct.
     assert early.status_code in (200, 409)
+
+
+def test_create_run_demo_claim_shape_returns_202_with_run_id():
+    response = client.post(
+        "/api/runs",
+        json={
+            "paper_id": "demo_replicated",
+            "claim": "A 10% rise in the minimum wage reduces teen employment by 1-3%.",
+        },
+    )
+    assert response.status_code == 202
+    assert response.status_code != 500
+    body = response.json()
+    assert body["run_id"].startswith("run_")
+
+
+def test_create_run_with_paper_text_echoed_in_detail():
+    response = client.post(
+        "/api/runs",
+        json={
+            "paper_id": "demo_replicated",
+            "claim": "A 10% rise in the minimum wage reduces teen employment by 1-3%.",
+            "paper_text": "Pasted excerpt: teen employment fell 2% after the hike.",
+        },
+    )
+    assert response.status_code == 202
+    run_id = response.json()["run_id"]
+
+    detail = client.get(f"/api/runs/{run_id}")
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["paper_text"] == "Pasted excerpt: teen employment fell 2% after the hike."
+
+    omitted = client.post(
+        "/api/runs",
+        json={"paper_id": "demo_replicated", "claim": "A pasted claim without paper text."},
+    )
+    assert omitted.status_code == 202
+    omitted_detail = client.get(f"/api/runs/{omitted.json()['run_id']}")
+    assert omitted_detail.status_code == 200
+    assert "paper_text" in omitted_detail.json()
+    assert omitted_detail.json()["paper_text"] is None
+
+
+def test_create_run_empty_claim_422_with_detail():
+    response = client.post("/api/runs", json={"paper_id": "demo_replicated", "claim": ""})
+    assert response.status_code == 422
+    assert response.status_code != 500
+    assert "detail" in response.json()
+
+
+def test_create_run_unknown_paper_stays_404():
+    response = client.post(
+        "/api/runs", json={"paper_id": "minwage_teen_employment", "claim": "x"}
+    )
+    # Illustrative §11 id with no frozen manifest: unknown ids stay 404.
+    assert response.status_code == 404
+    assert response.status_code != 500

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createRun, listPapers, type Paper } from "../lib/api";
+import { listPapers, type Paper } from "../lib/api";
 import { Alert, Card } from "../components/beUI";
 
 const FALLBACK_PAPERS: Paper[] = [
@@ -13,6 +13,7 @@ export default function ClaimInput(): JSX.Element {
   const [papers, setPapers] = useState<Paper[]>(FALLBACK_PAPERS);
   const [paperId, setPaperId] = useState("");
   const [claim, setClaim] = useState("");
+  const [paperText, setPaperText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,13 +38,33 @@ export default function ClaimInput(): JSX.Element {
   async function onSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError(null);
-    if (!paperId || !claim.trim()) {
+    const trimmedClaim = claim.trim();
+    if (!paperId || !trimmedClaim) {
       setError("Pick a paper and paste a claim first.");
       return;
     }
     setBusy(true);
     try {
-      const run = await createRun(paperId, claim.trim());
+      const trimmedPaperText = paperText.trim();
+      let res: Response;
+      try {
+        res = await fetch("/api/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            trimmedPaperText
+              ? { paper_id: paperId, claim: trimmedClaim, paper_text: trimmedPaperText }
+              : { paper_id: paperId, claim: trimmedClaim },
+          ),
+        });
+      } catch (err) {
+        throw new Error(`cannot reach the QED server: ${String(err)}`);
+      }
+      if (res.status === 404) throw new Error("unknown paper id");
+      if (!res.ok) throw new Error(`run creation failed (HTTP ${res.status})`);
+      const run = (await res.json()) as { run_id?: unknown };
+      if (!run || typeof run.run_id !== "string" || !run.run_id)
+        throw new Error("server returned a malformed run");
       navigate(`/runs/${run.run_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -76,7 +97,19 @@ export default function ClaimInput(): JSX.Element {
             value={claim}
             onChange={(e) => setClaim(e.target.value)}
             rows={4}
+            required
             placeholder="Paste the published claim, e.g. smaller class sizes raise test scores."
+            style={{ padding: 8, borderRadius: 8 }}
+          />
+        </label>
+        <label style={{ display: "grid", gap: 4, fontSize: 14 }}>
+          Paper text (optional)
+          <textarea
+            value={paperText}
+            onChange={(e) => setPaperText(e.target.value)}
+            rows={6}
+            maxLength={20000}
+            placeholder="Optionally paste the paper text or excerpt the claim was drawn from."
             style={{ padding: 8, borderRadius: 8 }}
           />
         </label>
