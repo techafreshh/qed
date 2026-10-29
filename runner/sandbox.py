@@ -218,6 +218,23 @@ def _run_fake(code: str, data: Any, timebox: float) -> RunResult:
     )
 
 
+def _data_blobs(data: Any):
+    """Validate ``data`` filenames and yield ``(name, bytes)`` pairs."""
+    if not data:
+        return
+    items = data.items() if isinstance(data, dict) else []
+    for name, content in items:
+        filename = str(name)
+        if not filename or filename.strip() == "":
+            raise ValueError("data filename must be non-empty")
+        normalized = os.path.normpath(filename)
+        if os.path.isabs(normalized) or normalized.startswith(".."):
+            raise ValueError("unsafe data filename: %r" % (filename,))
+        blob = content if isinstance(content, bytes) else str(
+            content).encode()
+        yield normalized, blob
+
+
 def _run_live(code: str, image: str, data: Any, timebox: float) -> RunResult:
     """Execute ``code`` in a locked Modal sandbox (live path only)."""
     try:
@@ -228,81 +245,68 @@ def _run_live(code: str, image: str, data: Any, timebox: float) -> RunResult:
             "pip install 'modal>=1.0'"
         ) from exc
     started = time.monotonic()
+    # Both bounds are seconds: sandbox lifetime and exec deadline.
+    timeout_s = max(1, int(math.ceil(timebox)))
     dockerfile = os.path.join(_IMAGES_DIR, "%s.Dockerfile" % image)
     modal_image = modal.Image.from_dockerfile(dockerfile)
-    timeout_ms = int(timebox * 1000)
+    # Fail closed: no fallback may drop the egress restriction.
+    sandbox = modal.Sandbox.create(
+        image=modal_image,
+        timeout=timeout_s,
+        outbound_domain_allowlist=PIP_EGRESS_ALLOWLIST,
+    )
     try:
-        sandbox = modal.Sandbox.create(
-            image=modal_image,
-            timeout=timeout_ms,
-            network_egress_allowlist=PIP_EGRESS_ALLOWLIST,
+        for filename, blob in _data_blobs(data):
+            sandbox.filesystem.write_bytes(blob, "/tmp/" + filename)
+        proc = sandbox.exec("python3", "-c", code, timeout=timeout_s)
+        exit_code = int(proc.wait())
+        stdout = proc.stdout.read() or ""
+        stderr = proc.stderr.read() or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode("utf-8", "replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", "replace")
+        if exit_code == -1:
+            # Exec deadline exceeded: the sandbox killed the run.
+            note = "hard kill at %.1fs timebox" % timebox
+            stderr = (stderr + ("\n" if stderr else "") + note)
+            duration_s = time.monotonic() - started
+            notebook = _build_notebook(code, stdout, stderr,
+                                       TIMEOUT_EXIT_CODE)
+            cell_outputs = []
+            if stdout:
+                cell_outputs.append(stdout)
+            cell_outputs.append(note)
+            return RunResult(
+                stdout=stdout,
+                stderr=stderr,
+                notebook=notebook,
+                cell_outputs=cell_outputs,
+                exit_code=TIMEOUT_EXIT_CODE,
+                duration_s=max(duration_s, 0.0),
+            )
+        duration_s = time.monotonic() - started
+        if duration_s < 0:
+            duration_s = 0.0
+        notebook = _build_notebook(code, stdout, stderr, exit_code)
+        cell_outputs = []
+        if stdout:
+            cell_outputs.append(stdout)
+        if stderr and exit_code != 0:
+            cell_outputs.append(stderr)
+        return RunResult(
+            stdout=stdout,
+            stderr=stderr,
+            notebook=notebook,
+            cell_outputs=cell_outputs,
+            exit_code=exit_code,
+            duration_s=duration_s,
         )
-    except TypeError:
-        # Older modal versions lack the egress allowlist argument; the
-        # client-side wait below still bounds the run by ``timebox``.
-        sandbox = modal.Sandbox.create(
-            image=modal_image,
-            timeout=timeout_ms,
-        )
-    if data:
-        items = data.items() if isinstance(data, dict) else []
-        for name, content in items:
-            blob = content if isinstance(content, bytes) else str(
-                content).encode()
-            sandbox.write_file("/tmp/%s" % str(name), blob)
-    proc = sandbox.exec("python3", "-c", code)
-    try:
-        proc.wait(timeout=timebox)
-    except Exception:
+    finally:
         try:
-            proc.terminate()
+            sandbox.terminate()
         except Exception:
             pass
-        duration_s = time.monotonic() - started
-        notebook = _build_notebook(
-            code, "", "hard kill at %.1fs timebox" % timebox,
-            TIMEOUT_EXIT_CODE)
-        return RunResult(
-            stdout="",
-            stderr="hard kill at %.1fs timebox" % timebox,
-            notebook=notebook,
-            cell_outputs=["hard kill at %.1fs timebox" % timebox],
-            exit_code=TIMEOUT_EXIT_CODE,
-            duration_s=max(duration_s, 0.0),
-        )
-    stdout = getattr(proc, "stdout", "") or ""
-    stderr = getattr(proc, "stderr", "") or ""
-    if hasattr(stdout, "read"):
-        stdout = stdout.read()
-    if hasattr(stderr, "read"):
-        stderr = stderr.read()
-    stdout = str(stdout)
-    stderr = str(stderr)
-    try:
-        exit_code = int(getattr(proc, "returncode", 0) or 0)
-    except (TypeError, ValueError):
-        exit_code = 0
-    try:
-        sandbox.terminate()
-    except Exception:
-        pass
-    duration_s = time.monotonic() - started
-    if duration_s < 0:
-        duration_s = 0.0
-    notebook = _build_notebook(code, stdout, stderr, exit_code)
-    cell_outputs = []
-    if stdout:
-        cell_outputs.append(stdout)
-    if stderr and exit_code != 0:
-        cell_outputs.append(stderr)
-    return RunResult(
-        stdout=stdout,
-        stderr=stderr,
-        notebook=notebook,
-        cell_outputs=cell_outputs,
-        exit_code=exit_code,
-        duration_s=duration_s,
-    )
 
 
 def run_code(code: str, image: str = "stats", data: Any = None,
