@@ -87,6 +87,30 @@ def _cell_label(cell) -> str:
         return "cell"
 
 
+def _target_verdict_for(paper_id: str) -> str:
+    """Resolve the frozen manifest's recorded verdict for ``paper_id``.
+
+    Lazy import keeps module import order intact; any loader failure falls
+    back to the legacy ``demo_failed`` -> FAILED / else REPLICATED rule."""
+    try:
+        from library.schema import load_library
+
+        wanted: dict = {}
+        for manifest in load_library():
+            try:
+                wanted[manifest.id] = manifest.expected_verdict
+            except Exception:
+                continue
+        verdict = wanted.get(paper_id)
+        if isinstance(verdict, str) and verdict.strip():
+            return verdict.strip().upper()
+    except Exception:
+        pass
+    if paper_id == "demo_failed":
+        return "FAILED"
+    return "REPLICATED"
+
+
 def _grid_results_offline(spec, paper_id: str) -> tuple[float, float, list]:
     """Synthesize deterministic sandbox outputs; never raises."""
     try:
@@ -107,7 +131,16 @@ def _grid_results_offline(spec, paper_id: str) -> tuple[float, float, list]:
         dumps = []
     if not dumps:
         dumps = [{"choice": "baseline"}, {"choice": "controls-in"}]
-    broken = paper_id == "demo_failed"
+    target = _target_verdict_for(paper_id)
+    if target == "PARTIAL":
+        # Same sign and significance, magnitude outside +-10% so decide()
+        # yields PARTIAL via its magnitude rule; grid holds.
+        results = []
+        for index, dumped in enumerate(dumps):
+            label = _cell_label(dumped) or "cell %d" % index
+            results.append({"estimate": 2.6, "p": 0.02, "choice": label})
+        return 2.6, 0.02, results
+    broken = target == "FAILED"
     results = []
     for index, dumped in enumerate(dumps):
         label = _cell_label(dumped) or "cell %d" % index
