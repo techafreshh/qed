@@ -54,10 +54,56 @@ def test_genuine_run_zero_untraced(monkeypatch):
     for run_id in ("demo_replicated", "demo_failed"):
         untraced, card_numbers, cell_numbers = check(run_id)
         assert untraced == []
+        assert card_numbers, "card must carry numbers for %s" % run_id
         assert cell_numbers, "executed cells must yield numbers for %s" % run_id
     proc = _run_cli(monkeypatch, "demo_replicated")
     assert proc.returncode == 0
     assert "0 untraced" in proc.stdout
+    assert "card numbers checked" in proc.stdout
+    assert "(0 card numbers checked" not in proc.stdout
+
+
+def test_demo_cards_carry_headline_numbers(monkeypatch):
+    _scrubbed_env(monkeypatch, QED_OFFLINE="1")
+    from runner.offline import replay
+
+    for run_id in ("demo_replicated", "demo_failed"):
+        card = build_card_text(replay(run_id))
+        lowered = card.lower()
+        assert "claimed" in lowered, "headline must cite claimed for %s" % run_id
+        assert "reproduced" in lowered, (
+            "headline must cite reproduced for %s" % run_id
+        )
+        assert "alpha=" in lowered, "headline must cite band for %s" % run_id
+    failed_card = build_card_text(replay("demo_failed"))
+    assert "1.02" in failed_card
+    assert "7001" in failed_card
+    assert "controls-in" not in failed_card.lower()
+    replicated_card = build_card_text(replay("demo_replicated"))
+    assert "2.05" in replicated_card
+    assert "Headline comparison" in replicated_card
+    assert "Headline comparison" in failed_card
+
+
+def test_doctored_headline_number_untraced(monkeypatch, tmp_path, capsys):
+    _scrubbed_env(monkeypatch, QED_OFFLINE="1")
+    doctored = (
+        "Headline comparison (claimed 999.99 vs reproduced 2.05, "
+        "p=0.02, significant at alpha=0.05)"
+    )
+    untraced, card_numbers, _ = check("demo_replicated", card_text=doctored)
+    assert 999.99 in untraced
+    assert 999.99 in card_numbers
+    card = tmp_path / "headline.txt"
+    card.write_text(doctored + "\n", encoding="utf-8")
+    assert main(["--run-id", "demo_replicated", "--card-file", str(card)]) == 1
+    out = capsys.readouterr().out
+    assert "untraced" in out
+    assert "999.99" in out
+    proc = _run_cli(monkeypatch, "demo_failed", "--card-text", doctored)
+    assert proc.returncode == 1
+    assert "untraced" in proc.stdout
+    assert "999.99" in proc.stdout
 
 
 def test_doctored_card_999_untraced(monkeypatch):
