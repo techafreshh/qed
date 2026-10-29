@@ -80,3 +80,10 @@ def test_demo_offline_makefile_target(monkeypatch):
     text = _MAKEFILE.read_text(encoding="utf-8")
     assert "demo-offline:" in text
     assert "QED_OFFLINE=1" in text
+    # Printed curl lines must paste verbatim: the JSON payload is single-quoted
+    # so the shell does not brace-expand/word-split it (issue #25 repair).
+    # The echo argument itself is double-quoted, so undo its shell escaping
+    # to get exactly the lines a presenter would paste.
+    rendered = text.replace('\\"', '"')
+    assert "-d '{\"paper_id\":\"demo_replicated\"" in rendered
+    assert "-d '{\"paper_id\":\"demo_failed\"" in rendered
