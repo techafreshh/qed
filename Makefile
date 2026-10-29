@@ -1,4 +1,4 @@
-.PHONY: dev demo-offline test build-ui
+.PHONY: dev demo-offline test build-ui replay
 
 dev:
 	python3 -m uvicorn app.main:app --reload --port 8000
@@ -11,6 +11,9 @@ demo-offline:
 
 test:
 	python3 -m pytest -q
+
+replay:
+	QED_OFFLINE=1 python3 evals/replay.py $(ARGS)
 
 build-ui:
 	@if command -v npm >/dev/null 2>&1; then \
