@@ -19,6 +19,9 @@ node_modules/
 ui/dist/
 .vite/
 
+# Built UI bundle is committed so the demo works without node.
+!app/static/
+
 # SQLite / run artifacts
 *.db
 *.sqlite3
