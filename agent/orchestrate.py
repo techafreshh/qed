@@ -16,6 +16,7 @@ import time
 from agent.events import StageEvent, now_iso, to_dict
 from agent.extract import ExtractionFailed, extract
 from agent.grid import plan_grid
+from agent.validate import Refused, check_banned_imports, is_vague_claim
 from app.config import parse_offline
 from codegen.base import check_recursion_guard
 from rubric.verdict import decide
@@ -157,6 +158,71 @@ def _grid_results_offline(spec, paper_id: str) -> tuple[float, float, list]:
     return 2.05, 0.02, results
 
 
+def _refused_result(paper_id, claim_text, reason, trace_prefix, start,
+                    attempts=0, code="") -> dict:
+    """Honest refusal envelope: empty verdict, reason carried in trace."""
+    try:
+        duration_s = time.monotonic() - start
+    except Exception:
+        duration_s = 0.0
+    if duration_s < 0:
+        duration_s = 0.0
+    try:
+        code_text = code if isinstance(code, str) else str(code)
+    except Exception:
+        code_text = ""
+    try:
+        code_sha256 = hashlib.sha256(code_text.encode("utf-8")).hexdigest()
+    except Exception:
+        code_sha256 = hashlib.sha256(b"").hexdigest()
+    fragile_choice = "refused: %s" % reason
+    trace = list(trace_prefix) if trace_prefix else []
+    seen: set = set()
+    for entry in trace:
+        try:
+            seen.add(entry.get("stage"))
+        except Exception:
+            continue
+    run_log = {
+        "code_sha256": code_sha256,
+        "image_digest": OFFLINE_IMAGE_DIGEST,
+        "duration_s": duration_s,
+        "attempts": attempts,
+    }
+    for stage in STAGES:
+        if stage in seen:
+            continue
+        if stage == "verdict":
+            detail = {
+                "verdict": "",
+                "fragile_choice": fragile_choice,
+                "refused": True,
+                "reason": reason,
+            }
+            detail.update(run_log)
+        elif stage == "sandbox":
+            detail = {"refused": True, "reason": reason}
+            detail.update(run_log)
+        else:
+            detail = {"refused": True, "reason": reason,
+                      "attempts": attempts}
+        trace.append(
+            to_dict(StageEvent(stage=stage, ts=now_iso(), detail=detail))
+        )
+    notebook = _build_notebook(paper_id, claim_text, code_text, "",
+                               fragile_choice, run_log)
+    return {
+        "verdict": "",
+        "fragile_choice": fragile_choice,
+        "trace": trace,
+        "notebook": notebook,
+        "code_sha256": code_sha256,
+        "image_digest": OFFLINE_IMAGE_DIGEST,
+        "duration_s": duration_s,
+        "attempts": attempts,
+    }
+
+
 def _coerce_claim(claim) -> str:
     try:
         if isinstance(claim, str) and claim.strip():
@@ -217,6 +283,16 @@ def run_claim(paper_id, claim="", backend=None) -> dict:
     deadline = start + RUN_TIMEBOX_S
     offline = parse_offline(os.environ.get("QED_OFFLINE"))
 
+    if is_vague_claim(claim_text):
+        return _refused_result(
+            paper_id,
+            claim_text,
+            "underspecified claim %r; refusing to invent a result"
+            % (claim_text,),
+            [],
+            start,
+        )
+
     trace: list[dict] = []
 
     # Extraction stage: honest but non-crashing on failure.
@@ -269,6 +345,14 @@ def run_claim(paper_id, claim="", backend=None) -> dict:
             prior_traceback = last_error
             code = candidate
             continue
+        try:
+            check_banned_imports(candidate)
+        except Refused as exc:
+            code = candidate
+            return _refused_result(
+                paper_id, claim_text, exc.reason, trace, start,
+                attempts=attempts, code=code,
+            )
         code = candidate
         last_error = ""
         break

@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from agent.validate import is_vague_claim
 from app.worker import schedule_run
 from db.models import create_run, get_run
 from library.schema import load_library
@@ -29,6 +30,16 @@ class RunIn(BaseModel):
     def _non_blank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("must not be blank")
+        return value
+
+    @field_validator("claim")
+    @classmethod
+    def _reject_vague_claim(cls, value: str) -> str:
+        if is_vague_claim(value):
+            raise ValueError(
+                "underspecified claim; refusing to queue a run "
+                "without a falsifiable claim"
+            )
         return value
 
     @field_validator("paper_text")
