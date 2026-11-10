@@ -72,6 +72,8 @@ def test_env_example_contains_all_keys():
         "MODAL_TOKEN",
         "QED_OFFLINE",
         "QED_CODEGEN_BACKEND",
+        "QED_MUSE_MODEL",
+        "META_API_URL",
     ):
         assert key in content
 
